@@ -31,7 +31,6 @@ int main (int argc, char **argv)
   int nonOptArgFlag = 0;
   int index;
   int sValue = 5;
-  int iValue = 3;
   int tValue = 20;
   const int MAXSLAVE = 20;
   FILE *file;
@@ -39,7 +38,7 @@ int main (int argc, char **argv)
   char *defaultFileName = "test.out";
   char *programName = argv[0];
   char *option = NULL;
-  char *short_options = "hs:l:i:t:";
+  char *short_options = "hs:l:t:";
   int c;
   int status;
 
@@ -67,9 +66,6 @@ int main (int argc, char **argv)
       case 'l':
         filename = optarg;
         break;
-      case 'i':
-        iValue = atoi(optarg);
-        break;
       case 't':
         tValue = atoi(optarg);  
         break;
@@ -81,10 +77,6 @@ int main (int argc, char **argv)
         else if (optopt == 'l') {
           fprintf(stderr, "Option -%c requires an argument. Using default value.\n", optopt);
           filename = defaultFileName;
-        }
-        else if (optopt == 'i') {
-          fprintf(stderr, "Option -%c requires an argument. Using default value.\n", optopt);
-          iValue = 3;
         }
         else if (optopt == 't') {
           fprintf(stderr, "Option -%c requires an argument. Using default value.\n", optopt);
@@ -188,9 +180,8 @@ int main (int argc, char **argv)
       pid_t gpid = getpgrp();
       sprintf(mArg, "%d", shmid);
       sprintf(nArg, "%d", j);
-      sprintf(iArg, "%d", iValue);
       sprintf(tArg, "%d", tValue);
-      char *slaveOptions[] = {"./slaverunner", "-i", iArg, "-l", filename, "-m", mArg, "-n", nArg, "-t", tArg, (char *)0};
+      char *slaveOptions[] = {"./slaverunner", "-l", filename, "-m", mArg, "-n", nArg, "-t", tArg, (char *)0};
       execv("./slaverunner", slaveOptions);
       fprintf(stderr, "    Should only print this in error\n");
     }

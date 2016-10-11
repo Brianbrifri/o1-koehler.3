@@ -32,7 +32,7 @@ int main (int argc, char **argv) {
   char *fileName;
   char *defaultFileName = "test.out";
   char *option = NULL;
-  char *short_options = "i:l:m:n:t:";
+  char *short_options = "l:m:n:t:";
   FILE *file;
   int c;
   myPid = getpid();
@@ -41,9 +41,6 @@ int main (int argc, char **argv) {
   opterr = 0;
   while((c = getopt(argc, argv, short_options)) != -1) 
     switch (c) {
-      case 'i':
-        numOfWrites = atoi(optarg);
-        break;
       case 'l':
         fileName = optarg;
         break;

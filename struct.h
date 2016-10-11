@@ -9,10 +9,17 @@
 enum state { idle, want_in, in_cs};
 
 typedef struct data_struct {
+  int seconds;
+  int nanoseconds;
   int sharedInt;
   int turn;
   int totalProcesses;
   enum state flag[];
 } data;
+
+typedef struct msgbuf {
+  long mType;
+  char mText[];
+} msgbuf;
 
 #endif
