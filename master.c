@@ -16,23 +16,23 @@
 
 void interruptHandler(int);
 void processDestroyer(void);
-int detachAndRemove(int, data*);
+int detachAndRemove(int, long long*);
 void printHelpMessage(void);
 void printShortHelpMessage(void);
 pid_t myPid, childPid;
+const int TOTAL_SLAVES = 100;
+const int MAXSLAVE = 20;
 
 int main (int argc, char **argv)
 {
   int shmid;
-  int *sharedInt = 0;
-  data *sharedStates;
+  long long *ossTimer = 0;
   key_t key = 120983464;
   int hflag = 0;
   int nonOptArgFlag = 0;
   int index;
-  int sValue = 5;
+  int sValue = 1;
   int tValue = 20;
-  const int MAXSLAVE = 20;
   FILE *file;
   char *filename = "test.out";
   char *defaultFileName = "test.out";
@@ -60,7 +60,7 @@ int main (int argc, char **argv)
         sValue = atoi(optarg);
         if(sValue > MAXSLAVE) {
           sValue = 20;
-          fprintf(stderr, "No more than 20 slave processes allowed. Reverting to 20.\n");
+          fprintf(stderr, "No more than 20 slave processes allowed at a time. Reverting to 20.\n");
         }
         break;
       case 'l':
@@ -124,13 +124,13 @@ int main (int argc, char **argv)
 
   //Try to get the shared mem id from the key with a size of the struct
   //create it with all perms
-  if((shmid = shmget(key, sizeof(data), IPC_CREAT | 0777)) == -1) {
+  if((shmid = shmget(key, sizeof(long long), IPC_CREAT | 0777)) == -1) {
     perror("Bad shmget allocation");
     exit(-1);
   }
 
   //Try to attach the struct pointer to shared memory
-  if((sharedStates = (data *)shmat(shmid, NULL, 0)) == (void *) -1) {
+  if((ossTimer = (long long *)shmat(shmid, NULL, 0)) == (void *) -1) {
     perror("Could not attach shared mem");
     exit(-1);
   }
@@ -143,28 +143,16 @@ int main (int argc, char **argv)
   }
   
   fprintf(file,"***** BEGIN LOG *****\n");
-  if(fclose(file)) {
-    perror("Error closing file");
-  }
-
  
   //Malloc some space for the args going into the slaves
   char *mArg = malloc(20);
   char *nArg = malloc(20);
-  char *iArg = malloc(20);
   char *tArg = malloc(20);
 
   //Initialize some shared memory variables
-  sharedStates->sharedInt = 0;
-  sharedStates->turn = 0;
-  sharedStates->totalProcesses = sValue;
 
   int j;
-  //Set all the flags to idle to begin
-  for(j = 0; j < sValue; j++) {
-    sharedStates->flag[j] = idle;
-  }
-
+  
   //Fork sValue processes
   for(j = 0; j < sValue; j++) {
   
@@ -190,7 +178,10 @@ int main (int argc, char **argv)
   free(mArg);
   free(nArg);
   free(tArg);
-  free(iArg);
+
+  while(1) {
+    *ossTimer = *ossTimer + 1000;
+  }
 
   //Wait for sValue number of processes to finish
   for(j = 1; j <= sValue; j++) {
@@ -200,7 +191,7 @@ int main (int argc, char **argv)
   }
  
   //Detach and remove the shared memory after all child process have died
-  if(detachAndRemove(shmid, sharedStates) == -1) {
+  if(detachAndRemove(shmid, ossTimer) == -1) {
     perror("Failed to destroy shared memory segment");
     return -1;
   }
@@ -234,7 +225,7 @@ void processDestroyer() {
 }
 
 //Detach and remove function
-int detachAndRemove(int shmid, data *shmaddr) {
+int detachAndRemove(int shmid, long long *shmaddr) {
   printf("Master: Detach and Remove Shared Memory\n");
   int error = 0;
   if(shmdt(shmaddr) == -1) {
@@ -256,12 +247,10 @@ void printHelpMessage(void) {
     printf("The following is a helpful guide to enable you to use this\n");
     printf("slavedriver program to the best of your ability!\n\n");
     printf("-h, --help: Prints this help message.\n");
-    printf("-s: Allows you to set the number of slave process to run.\n");
+    printf("-s: Allows you to set the number of slave process waiting to run.\n");
     printf("\tThe default value is 5. The max is 20.\n");
     printf("-l: Allows you to set the filename for the logger so the aliens can see how bad you mess up.\n");
     printf("\tThe default value is test.out.\n");
-    printf("-i: Allows you to set the number of times each slave enters the critical section of code.\n");
-    printf("\tThe default value is 3.\n");
     printf("-t: Allows you set the wait time for the master process until it kills the slaves.\n");
     printf("\tThe default value is 20.\n");
 }
@@ -269,7 +258,7 @@ void printHelpMessage(void) {
 //short help message
 void printShortHelpMessage(void) {
   printf("\nAcceptable options are:\n");
-  printf("[-h], [--help], [-l][required_arg], [-s][required_arg], [-i][required_arg], [-t][required_arg]\n\n");
+  printf("[-h], [--help], [-l][required_arg], [-s][required_arg], [-t][required_arg]\n\n");
 }
 
 

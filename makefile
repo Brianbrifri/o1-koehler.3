@@ -1,11 +1,11 @@
-all: slavedriver slaverunner
+all: oss slaverunner
 .PHONY: clean
 
 masterObjects = master.o 
 slaveObjects = slave.o
 
-slavedriver: $(masterObjects)
-	gcc -g -o slavedriver master.o
+oss: $(masterObjects)
+	gcc -g -o oss master.o
 
 slaverunner: $(slaveObjects)
 	gcc -g -o slaverunner slave.o
@@ -17,4 +17,4 @@ slave.o: struct.h
 	gcc -g -c slave.c
 
 clean:
-	-rm slavedriver slaverunner $(masterObjects) $(slaveObjects)
+	-rm oss slaverunner $(masterObjects) $(slaveObjects)
