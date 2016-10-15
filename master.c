@@ -17,24 +17,34 @@
 
 void interruptHandler(int);
 void processDestroyer(void);
+void sendMessage(int, int);
+void getMessage(int, int);
 int detachAndRemove(int, long long*);
 void printHelpMessage(void);
 void printShortHelpMessage(void);
+
 pid_t myPid, childPid;
+int slaveQueueId;
+int masterQueueId;
+int nextProcessToSend = 1;
+int messageReceived = 0;
+
 const int TOTAL_SLAVES = 100;
 const int MAXSLAVE = 20;
-const long long INCREMENTER = 1000;
+const long long INCREMENTER = 10;
 
 int main (int argc, char **argv)
 {
   int shmid;
   long long *ossTimer = 0;
-  key_t key = 120983464;
+  key_t timerKey = 148364;
+  key_t masterKey = 128464;
+  key_t slaveKey = 120314;
   int hflag = 0;
   int nonOptArgFlag = 0;
   int index;
-  int sValue = 1;
-  int tValue = 20;
+  int sValue = 5;
+  int tValue = 5;
   FILE *file;
   char *filename = "test.out";
   char *defaultFileName = "test.out";
@@ -126,7 +136,7 @@ int main (int argc, char **argv)
 
   //Try to get the shared mem id from the key with a size of the struct
   //create it with all perms
-  if((shmid = shmget(key, sizeof(long long), IPC_CREAT | 0777)) == -1) {
+  if((shmid = shmget(timerKey, sizeof(long long), IPC_CREAT | 0777)) == -1) {
     perror("Bad shmget allocation");
     exit(-1);
   }
@@ -136,6 +146,17 @@ int main (int argc, char **argv)
     perror("Master could not attach shared mem");
     exit(-1);
   }
+
+  if((slaveQueueId = msgget(slaveKey, IPC_CREAT | 0777)) == -1) {
+    perror("Master msgget for slave queue");
+    exit(-1);
+  }
+
+  if((masterQueueId = msgget(masterKey, IPC_CREAT | 0777)) == -1) {
+    perror("Master msgget for master queue");
+    exit(-1);
+  }
+
 
   //Open file and mark the beginning of the new log
   file = fopen(filename, "a");
@@ -169,7 +190,7 @@ int main (int argc, char **argv)
       childPid = getpid();
       pid_t gpid = getpgrp();
       sprintf(mArg, "%d", shmid);
-      sprintf(nArg, "%d", j);
+      sprintf(nArg, "%d", j + 1);
       sprintf(tArg, "%d", tValue);
       char *slaveOptions[] = {"./slaverunner", "-l", filename, "-m", mArg, "-n", nArg, "-t", tArg, (char *)0};
       execv("./slaverunner", slaveOptions);
@@ -181,9 +202,13 @@ int main (int argc, char **argv)
   free(nArg);
   free(tArg);
 
+  sendMessage(slaveQueueId, nextProcessToSend);
+
+
   //while(1) {
-  while(*ossTimer < 1000000000) {
+  while(messageReceived < sValue) {
     *ossTimer = *ossTimer + INCREMENTER;
+    getMessage(masterQueueId, 3);
     //printf("Master ossTimer: %i\n", *ossTimer);
   }
 
@@ -199,6 +224,9 @@ int main (int argc, char **argv)
     perror("Failed to destroy shared memory segment");
     return -1;
   }
+
+  msgctl(slaveQueueId, IPC_RMID, NULL);
+  msgctl(masterQueueId, IPC_RMID, NULL);
 
   return 0;
 }
@@ -228,6 +256,34 @@ void interruptHandler(int SIG){
 void processDestroyer() {
   kill(-getpgrp(), SIGQUIT);
 }
+
+void sendMessage(int qid, int msgtype) {
+  struct msgbuf msg;
+
+  msg.mType = msgtype;
+  sprintf(msg.mText, "Time to enter CS\n");
+  
+  if(msgsnd(qid, (void *) &msg, sizeof(msg.mText), IPC_NOWAIT) == -1) {
+    perror("Master msgsnd error");
+  }
+
+}
+
+void getMessage(int qid, int msgtype) {
+  struct msgbuf msg;
+
+  if(msgrcv(qid, (void *) &msg, sizeof(msg.mText), msgtype, MSG_NOERROR | IPC_NOWAIT) == -1) {
+    if(errno != ENOMSG) {
+      perror("Slave msgrcv");
+    }
+  }
+  else {
+    printf("Message received: %s", msg.mText);
+    messageReceived++;
+    sendMessage(slaveQueueId, ++nextProcessToSend);
+  }
+}
+
 
 //Detach and remove function
 int detachAndRemove(int shmid, long long *shmaddr) {
