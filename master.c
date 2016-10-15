@@ -28,6 +28,7 @@ int slaveQueueId;
 int masterQueueId;
 int nextProcessToSend = 1;
 int messageReceived = 0;
+long long *ossTimer = 0;
 
 const int TOTAL_SLAVES = 100;
 const int MAXSLAVE = 20;
@@ -36,7 +37,6 @@ const long long INCREMENTER = 10;
 int main (int argc, char **argv)
 {
   int shmid;
-  long long *ossTimer = 0;
   key_t timerKey = 148364;
   key_t masterKey = 128464;
   key_t slaveKey = 120314;
@@ -274,11 +274,11 @@ void getMessage(int qid, int msgtype) {
 
   if(msgrcv(qid, (void *) &msg, sizeof(msg.mText), msgtype, MSG_NOERROR | IPC_NOWAIT) == -1) {
     if(errno != ENOMSG) {
-      perror("Slave msgrcv");
+      perror("Master msgrcv");
     }
   }
   else {
-    printf("Message received: %s", msg.mText);
+    printf("Slave terminating at my time %i because slave reached %s", *ossTimer, msg.mText);
     messageReceived++;
     sendMessage(slaveQueueId, ++nextProcessToSend);
   }

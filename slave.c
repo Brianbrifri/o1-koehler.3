@@ -130,7 +130,8 @@ void sendMessage(int qid, int msgtype, long long finishTime) {
   struct msgbuf msg;
 
   msg.mType = msgtype;
-  sprintf(msg.mText, "Slave %d finished at time %i\n", processNumber, finishTime);
+  sprintf(msg.mText, "%i\n",finishTime);
+  //sprintf(msg.mText, "Slave %d finished at time %i\n", processNumber, finishTime);
   
   if(msgsnd(qid, (void *) &msg, sizeof(msg.mText), IPC_NOWAIT) == -1) {
     perror("Slave msgsnd error");
