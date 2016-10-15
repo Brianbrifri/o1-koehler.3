@@ -9,6 +9,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
+#include <sys/msg.h>
 #include <errno.h>
 #include <time.h>
 
@@ -22,6 +23,7 @@ void printShortHelpMessage(void);
 pid_t myPid, childPid;
 const int TOTAL_SLAVES = 100;
 const int MAXSLAVE = 20;
+const long long INCREMENTER = 1000;
 
 int main (int argc, char **argv)
 {
@@ -118,7 +120,7 @@ int main (int argc, char **argv)
   //Initialize the alarm and CTRL-C handler
   signal(SIGALRM, interruptHandler);
   signal(SIGINT, interruptHandler);
-  //
+  
   //set the alarm to tValue seconds
   alarm(tValue);
 
@@ -131,7 +133,7 @@ int main (int argc, char **argv)
 
   //Try to attach the struct pointer to shared memory
   if((ossTimer = (long long *)shmat(shmid, NULL, 0)) == (void *) -1) {
-    perror("Could not attach shared mem");
+    perror("Master could not attach shared mem");
     exit(-1);
   }
 
@@ -179,16 +181,18 @@ int main (int argc, char **argv)
   free(nArg);
   free(tArg);
 
-  while(1) {
-    *ossTimer = *ossTimer + 1000;
+  //while(1) {
+  while(*ossTimer < 1000000000) {
+    *ossTimer = *ossTimer + INCREMENTER;
+    //printf("Master ossTimer: %i\n", *ossTimer);
   }
 
   //Wait for sValue number of processes to finish
-  for(j = 1; j <= sValue; j++) {
-    childPid = wait(&status);
-    fprintf(stderr, "Master: Child %d has died....\n", childPid);
-    fprintf(stderr, "%s*****Master: %s%d%s/%d children are dead*****%s\n",YLW, RED, j, YLW, sValue, NRM);
-  }
+//  for(j = 1; j <= sValue; j++) {
+//    childPid = wait(&status);
+//    fprintf(stderr, "Master: Child %d has died....\n", childPid);
+//    fprintf(stderr, "%s*****Master: %s%d%s/%d children are dead*****%s\n",YLW, RED, j, YLW, sValue, NRM);
+//  }
  
   //Detach and remove the shared memory after all child process have died
   if(detachAndRemove(shmid, ossTimer) == -1) {
@@ -214,7 +218,8 @@ void interruptHandler(int SIG){
     fprintf(stderr, "%sMaster has timed out. Initiating shutdown sequence.%s\n", RED, NRM);
   }
 
-  processDestroyer();
+  kill(getpid(), SIGKILL);
+  //processDestroyer();
 }
 
 //Process destroyer. 

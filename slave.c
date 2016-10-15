@@ -9,6 +9,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
+#include <sys/msg.h>
 #include <signal.h>
 #include <time.h>
 
@@ -27,8 +28,10 @@ int main (int argc, char **argv) {
   int timeoutValue = 30;
   long long startTime;
   long long currentTime;
-  int shmid = 0;
   long long *ossTimer;
+
+  int shmid = 0;
+
   char *fileName;
   char *defaultFileName = "test.out";
   char *option = NULL;
@@ -60,7 +63,7 @@ int main (int argc, char **argv) {
 
   //Try to attach to shared memory
   if((ossTimer = (long long *)shmat(shmid, NULL, 0)) == (void *) -1) {
-    perror("    Could not attach shared mem");
+    perror("    Slave could not attach shared mem");
     exit(1);
   }
   
@@ -80,17 +83,17 @@ int main (int argc, char **argv) {
 
   int i = 0;
   int j;
-  int duration;
+  long long duration;
 
   duration = 1 + rand() % 100000;
+  printf("Duration gotten: %i\n", duration);
   startTime = *ossTimer;
   currentTime = *ossTimer - startTime;
 
 
-  while(currentTime < duration) {
-    currentTime = *ossTimer - startTime;
-    printf("Current time: %llu\n", currentTime);
- 
+  while((currentTime = (*ossTimer - startTime) / 1000) < duration) {
+    //currentTime = (*ossTimer - startTime) / 1000;
+    printf("Current time: %i\n", currentTime);
   }
   
   if(shmdt(ossTimer) == -1) {
