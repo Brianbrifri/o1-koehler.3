@@ -122,8 +122,8 @@ int main (int argc, char **argv) {
   }
 
   printf("Slave %d exiting\n", processNumber);
-  exit(1);
-  //kill(myPid, SIGTERM);
+  //exit(1);
+  kill(myPid, SIGTERM);
   sleep(1);
   kill(myPid, SIGKILL);
   printf("Slave error\n");
@@ -167,7 +167,7 @@ void getMessage(int qid, int msgtype) {
 void sigquitHandler(int sig) {
   printf("    Slave %d has received signal %s (%d)\n", processNumber, strsignal(sig), sig);
   sigNotReceived = 0;
-  //The slaves have at most 10 more seconds to exit gracefully or they will be SIGTERM'd
+  //The slaves have at most 5 more seconds to exit gracefully or they will be SIGTERM'd
   alarm(5);
 }
 

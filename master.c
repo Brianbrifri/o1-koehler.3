@@ -27,9 +27,11 @@ char *mArg;
 char *nArg;
 char *tArg;
 
+volatile sig_atomic_t sigNotReceived = 1;
 
 pid_t myPid, childPid;
 int tValue = 20;
+int sValue = 5;
 int shmid;
 int slaveQueueId;
 int masterQueueId;
@@ -55,7 +57,6 @@ int main (int argc, char **argv)
   int hflag = 0;
   int nonOptArgFlag = 0;
   int index;
-  int sValue = 5;
   FILE *file;
   char *filename = "test.out";
   char *defaultFileName = "test.out";
@@ -188,9 +189,6 @@ int main (int argc, char **argv)
     processDeath(masterQueueId, 3, file);
   }
 
-//  fprintf(stderr, "Master: Child %d has died....\n", childPid);
-//  fprintf(stderr, "%s*****Master: %s%d%s/%d children are dead*****%s\n",YLW, RED, j, YLW, sValue, NRM);
- 
   //Detach and remove the shared memory after all child process have died
   if(detachAndRemove(shmid, ossTimer) == -1) {
     perror("Failed to destroy shared memory segment");
@@ -255,6 +253,15 @@ void interruptHandler(int SIG){
     fprintf(stderr, "%sMaster has timed out. Initiating shutdown sequence.%s\n", RED, NRM);
   }
 
+  kill(-getpgrp(), SIGQUIT);
+
+  int j;
+//  while(nextProcessToSend < TOTAL_SLAVES) {
+   for(j = 0; j < sValue; j++) {
+    sendMessage(slaveQueueId, ++nextProcessToSend); 
+  }
+
+  sigNotReceived = 0;
   msgctl(slaveQueueId, IPC_RMID, NULL);
   msgctl(masterQueueId, IPC_RMID, NULL);
 
@@ -300,17 +307,17 @@ void processDeath(int qid, int msgtype, FILE *file) {
     }
   }
   else {
-    //kill(msqid_ds_buf.msg_lspid, SIGTERM);
     printf("Slave %d terminating at my time %llu.%09d because slave reached %s", 
             msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
     fprintf(file, "Slave %d terminating at my time %llu.%09d because slave reached %s", 
             msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
+
     messageReceived++;
+    fprintf(stderr, "%s*****Master: %s%d%s/%d children are dead*****%s\n",YLW, RED, messageReceived, YLW, TOTAL_SLAVES, NRM);
     
     printf("Sender of message: %d\n", msqid_ds_buf.msg_lspid);
     sendMessage(slaveQueueId, ++nextProcessToSend);
     if(processNumberBeingSpawned <= TOTAL_SLAVES) {
-      //sleep(1);
       spawnSlaves(1); 
     }
   }
