@@ -121,9 +121,12 @@ int main (int argc, char **argv) {
     perror("    Slave could not detach shared memory");
   }
 
-  kill(myPid, SIGTERM);
+  printf("Slave %d exiting\n", processNumber);
+  exit(1);
+  //kill(myPid, SIGTERM);
   sleep(1);
   kill(myPid, SIGKILL);
+  printf("Slave error\n");
   
 }
 
