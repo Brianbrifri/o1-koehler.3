@@ -6,7 +6,7 @@
 #define BLU "\x1b[34m"
 #define MAG "\x1b[35m"
 #define NRM "\x1b[0m"
-enum state { idle, want_in, in_cs};
+static const long long NANO_MODIFIER = 1000000000;
 
 typedef struct msgbuf {
   long mType;

@@ -15,18 +15,22 @@
 
 #include "struct.h"
 
+void spawnSlaves(int);
 void interruptHandler(int);
 void processDestroyer(void);
 void sendMessage(int, int);
-void getMessage(int, int);
+void processDeath(int, int, FILE*);
 int detachAndRemove(int, long long*);
 void printHelpMessage(void);
 void printShortHelpMessage(void);
 
 pid_t myPid, childPid;
+int tValue = 5;
+int shmid;
 int slaveQueueId;
 int masterQueueId;
 int nextProcessToSend = 1;
+int processNumberBeingSpawned = 1;
 int messageReceived = 0;
 long long *ossTimer = 0;
 
@@ -34,9 +38,10 @@ const int TOTAL_SLAVES = 100;
 const int MAXSLAVE = 20;
 const long long INCREMENTER = 10;
 
+struct msqid_ds *msqid_ds_buf;
+
 int main (int argc, char **argv)
 {
-  int shmid;
   key_t timerKey = 148364;
   key_t masterKey = 128464;
   key_t slaveKey = 120314;
@@ -44,7 +49,6 @@ int main (int argc, char **argv)
   int nonOptArgFlag = 0;
   int index;
   int sValue = 5;
-  int tValue = 5;
   FILE *file;
   char *filename = "test.out";
   char *defaultFileName = "test.out";
@@ -192,7 +196,7 @@ int main (int argc, char **argv)
       sprintf(mArg, "%d", shmid);
       sprintf(nArg, "%d", j + 1);
       sprintf(tArg, "%d", tValue);
-      char *slaveOptions[] = {"./slaverunner", "-l", filename, "-m", mArg, "-n", nArg, "-t", tArg, (char *)0};
+      char *slaveOptions[] = {"./slaverunner", "-m", mArg, "-n", nArg, "-t", tArg, (char *)0};
       execv("./slaverunner", slaveOptions);
       fprintf(stderr, "    Should only print this in error\n");
     }
@@ -206,10 +210,9 @@ int main (int argc, char **argv)
 
 
   //while(1) {
-  while(messageReceived < sValue) {
+  while(messageReceived < MAXSLAVE && (*ossTimer / NANO_MODIFIER < 2)) {
     *ossTimer = *ossTimer + INCREMENTER;
-    getMessage(masterQueueId, 3);
-    //printf("Master ossTimer: %i\n", *ossTimer);
+    processDeath(masterQueueId, 3, file);
   }
 
   //Wait for sValue number of processes to finish
@@ -230,6 +233,49 @@ int main (int argc, char **argv)
 
   return 0;
 }
+
+
+
+
+void spawnSlaves(int count) {
+
+  //Malloc some space for the args going into the slaves
+  char *mArg = malloc(20);
+  char *nArg = malloc(20);
+  char *tArg = malloc(20);
+
+  //Initialize some shared memory variables
+
+  int j;
+  
+  //Fork count # of processes
+  for(j = 0; j < count; j++) {
+  
+    //exit on bad fork
+    if((childPid = fork()) < 0) {
+      perror("Fork Failure");
+      exit(1);
+    }
+
+    //If good fork, continue to call exec with all the necessary args
+    if(childPid == 0) {
+      childPid = getpid();
+      pid_t gpid = getpgrp();
+      sprintf(mArg, "%d", shmid);
+      sprintf(nArg, "%d", processNumberBeingSpawned);
+      sprintf(tArg, "%d", tValue);
+      char *slaveOptions[] = {"./slaverunner", "-m", mArg, "-n", nArg, "-t", tArg, (char *)0};
+      execv("./slaverunner", slaveOptions);
+      fprintf(stderr, "    Should only print this in error\n");
+    }
+    processNumberBeingSpawned++;
+  }
+
+  free(mArg);
+  free(nArg);
+  free(tArg);
+}
+
 
 //Interrupt handler function that calls the process destroyer
 //Ignore SIGQUIT and SIGINT signal, not SIGALRM, so that
@@ -269,7 +315,7 @@ void sendMessage(int qid, int msgtype) {
 
 }
 
-void getMessage(int qid, int msgtype) {
+void processDeath(int qid, int msgtype, FILE *file) {
   struct msgbuf msg;
 
   if(msgrcv(qid, (void *) &msg, sizeof(msg.mText), msgtype, MSG_NOERROR | IPC_NOWAIT) == -1) {
@@ -278,9 +324,15 @@ void getMessage(int qid, int msgtype) {
     }
   }
   else {
-    printf("Slave terminating at my time %i because slave reached %s", *ossTimer, msg.mText);
+    printf("Slave terminating at my time %llu.%09d because slave reached %s", 
+            *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
+    fprintf(file, "Slave terminating at my time %llu.%09d because slave reached %s", 
+            *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
     messageReceived++;
     sendMessage(slaveQueueId, ++nextProcessToSend);
+    if(processNumberBeingSpawned < MAXSLAVE) {
+      spawnSlaves(1); 
+    }
   }
 }
 

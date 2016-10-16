@@ -29,7 +29,6 @@ int masterQueueId;
 const int QUIT_TIMEOUT = 10;
 
 int main (int argc, char **argv) {
-  srand(time(NULL));
   int timeoutValue = 30;
   long long startTime;
   long long currentTime;
@@ -68,6 +67,8 @@ int main (int argc, char **argv) {
         exit(-1);
     }
 
+  srand(time(NULL) + processNumber);
+
   //Try to attach to shared memory
   if((ossTimer = (long long *)shmat(shmid, NULL, 0)) == (void *) -1) {
     perror("    Slave could not attach shared mem");
@@ -103,18 +104,19 @@ int main (int argc, char **argv) {
   int i = 0;
   int j;
 
-  long long duration = 1 + rand() % 100000;
+  if(sigNotReceived) {
+    long long duration = 1 + rand() % 100000;
 
-  printf("Duration gotten: %i\n", duration);
-  startTime = *ossTimer;
-  currentTime = *ossTimer - startTime;
+    printf("Duration gotten: %i\n", duration);
+    startTime = *ossTimer;
+    currentTime = *ossTimer - startTime;
 
-  while((currentTime = (*ossTimer - startTime)) < duration) {
-    //printf("Current time: %i\n", currentTime);
+    while((currentTime = (*ossTimer - startTime)) < duration) {
+      //printf("Current time: %i\n", currentTime);
+    }
+    
+    sendMessage(masterQueueId, 3, *ossTimer);
   }
-  
-  sendMessage(masterQueueId, 3, *ossTimer);
-
   if(shmdt(ossTimer) == -1) {
     perror("    Slave could not detach shared memory");
   }
@@ -130,7 +132,7 @@ void sendMessage(int qid, int msgtype, long long finishTime) {
   struct msgbuf msg;
 
   msg.mType = msgtype;
-  sprintf(msg.mText, "%i\n",finishTime);
+  sprintf(msg.mText, "%llu.%09d\n",finishTime / NANO_MODIFIER, finishTime % NANO_MODIFIER);
   //sprintf(msg.mText, "Slave %d finished at time %i\n", processNumber, finishTime);
   
   if(msgsnd(qid, (void *) &msg, sizeof(msg.mText), IPC_NOWAIT) == -1) {
