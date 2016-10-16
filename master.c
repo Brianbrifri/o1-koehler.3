@@ -17,7 +17,7 @@
 
 void spawnSlaves(int);
 void interruptHandler(int);
-void processDestroyer(void);
+void cleanup(void);
 void sendMessage(int, int);
 void processDeath(int, int, FILE*);
 int detachAndRemove(int, long long*);
@@ -28,10 +28,12 @@ char *nArg;
 char *tArg;
 
 volatile sig_atomic_t sigNotReceived = 1;
+volatile sig_atomic_t cleanupCalled = 0;
 
 pid_t myPid, childPid;
 int tValue = 20;
 int sValue = 5;
+int status;
 int shmid;
 int slaveQueueId;
 int masterQueueId;
@@ -42,7 +44,7 @@ long long *ossTimer = 0;
 
 const int TOTAL_SLAVES = 100;
 const int MAXSLAVE = 20;
-const long long INCREMENTER = 10000;
+const long long INCREMENTER = 1400;
 
 struct msqid_ds msqid_ds_buf;
 
@@ -64,7 +66,6 @@ int main (int argc, char **argv)
   char *option = NULL;
   char *short_options = "hs:l:t:";
   int c;
-  int status;
 
 
   struct option long_options[] = {
@@ -143,6 +144,7 @@ int main (int argc, char **argv)
   signal(SIGALRM, interruptHandler);
   signal(SIGINT, interruptHandler);
   signal(SIGCHLD, SIG_IGN);
+  signal(SIGQUIT, SIG_IGN);
   
   //set the alarm to tValue seconds
   alarm(tValue);
@@ -180,28 +182,24 @@ int main (int argc, char **argv)
   
   fprintf(file,"***** BEGIN LOG *****\n");
  
+  //Spawn the inital value of slaves
   spawnSlaves(sValue);
 
+  //Send a message telling the next process to go into the CS
   sendMessage(slaveQueueId, nextProcessToSend);
 
-  while(messageReceived < TOTAL_SLAVES && *ossTimer < 200000000) {
+  //While the number of messages received are less than the total number
+  //of slaves are supposed to send back messages
+  while(messageReceived < TOTAL_SLAVES && *ossTimer < 2000000000 && sigNotReceived) {
     *ossTimer = *ossTimer + INCREMENTER;
     processDeath(masterQueueId, 3, file);
   }
 
-  //Detach and remove the shared memory after all child process have died
-  if(detachAndRemove(shmid, ossTimer) == -1) {
-    perror("Failed to destroy shared memory segment");
-    return -1;
+  if(!cleanupCalled) {
+    cleanupCalled = 1;
+    printf("Master cleanup called from main\n");
+    cleanup();
   }
-
-  msgctl(slaveQueueId, IPC_RMID, NULL);
-  msgctl(masterQueueId, IPC_RMID, NULL);
-
-  free(mArg);
-  free(nArg);
-  free(tArg);
-
   return 0;
 }
 
@@ -253,35 +251,56 @@ void interruptHandler(int SIG){
     fprintf(stderr, "%sMaster has timed out. Initiating shutdown sequence.%s\n", RED, NRM);
   }
 
+  if(!cleanupCalled) {
+    cleanupCalled = 1;
+    printf("Master cleanup called from interrupt\n");
+    cleanup();
+  }
+}
+
+//Cleanup memory and processes. 
+//kill calls SIGQUIT on the groupid to kill the children but
+//not the parent
+void cleanup() {
+  signal(SIGQUIT, SIG_IGN);
+
+  printf("Master sending SIGQUIT\n");
   kill(-getpgrp(), SIGQUIT);
 
+  sigNotReceived = 0;
+
+  //Sleep for one second to allow time for flags to change in processes
+  sleep(1);
+
   int j;
-//  while(nextProcessToSend < TOTAL_SLAVES) {
-   for(j = 0; j < sValue; j++) {
-    sendMessage(slaveQueueId, ++nextProcessToSend); 
+  for(j = nextProcessToSend; j < processNumberBeingSpawned; j++) {
+    printf("Master sending a cleanup message to process %d\n", j);
+    sendMessage(slaveQueueId, j); 
   }
 
-  sigNotReceived = 0;
-  msgctl(slaveQueueId, IPC_RMID, NULL);
-  msgctl(masterQueueId, IPC_RMID, NULL);
+  //free up the malloc'd memory for the arguments
+  free(mArg);
+  free(nArg);
+  free(tArg);
+  
+  kill(-getpgrp(), SIGQUIT);
+  printf("Master waiting on all processes do dieeee\n");
+  childPid = wait(&status);
 
+  printf("Master about to detach from shared memory\n");
+  //Detach and remove the shared memory after all child process have died
   if(detachAndRemove(shmid, ossTimer) == -1) {
     perror("Failed to destroy shared memory segment");
   }
 
-  free(mArg);
-  free(nArg);
-  free(tArg);
+  printf("Master about to delete message queues\n");
+  //Delete the message queues
+  msgctl(slaveQueueId, IPC_RMID, NULL);
+  msgctl(masterQueueId, IPC_RMID, NULL);
 
+  printf("Master about to kill itself\n");
+  //Kill this master process
   kill(getpid(), SIGKILL);
-  //processDestroyer();
-}
-
-//Process destroyer. 
-//kill calls SIGQUIT on the groupid to kill the children but
-//not the parent
-void processDestroyer() {
-  kill(-getpgrp(), SIGQUIT);
 }
 
 void sendMessage(int qid, int msgtype) {
@@ -307,15 +326,14 @@ void processDeath(int qid, int msgtype, FILE *file) {
     }
   }
   else {
-    printf("Slave %d terminating at my time %llu.%09d because slave reached %s", 
+    printf("Master: Slave %d terminating at my time %llu.%09d because slave reached %s", 
             msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
-    fprintf(file, "Slave %d terminating at my time %llu.%09d because slave reached %s", 
+    fprintf(file, "Master: Slave %d terminating at my time %llu.%09d because slave reached %s", 
             msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
 
     messageReceived++;
-    fprintf(stderr, "%s*****Master: %s%d%s/%d children are dead*****%s\n",YLW, RED, messageReceived, YLW, TOTAL_SLAVES, NRM);
+    fprintf(stderr, "%s*****Master: %s%d%s/%d children completed work*****%s\n",YLW, RED, messageReceived, YLW, TOTAL_SLAVES, NRM);
     
-    printf("Sender of message: %d\n", msqid_ds_buf.msg_lspid);
     sendMessage(slaveQueueId, ++nextProcessToSend);
     if(processNumberBeingSpawned <= TOTAL_SLAVES) {
       spawnSlaves(1); 
