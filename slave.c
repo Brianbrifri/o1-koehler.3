@@ -147,7 +147,7 @@ void sendMessage(int qid, int msgtype, long long finishTime) {
   struct msgbuf msg;
 
   msg.mType = msgtype;
-  sprintf(msg.mText, "%llu.%09d\n", finishTime / NANO_MODIFIER, finishTime % NANO_MODIFIER);
+  sprintf(msg.mText, "%llu.%09llu\n", finishTime / NANO_MODIFIER, finishTime % NANO_MODIFIER);
   
   if(msgsnd(qid, (void *) &msg, sizeof(msg.mText), IPC_NOWAIT) == -1) {
     perror("    Slave msgsnd error");

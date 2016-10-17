@@ -326,9 +326,9 @@ void processDeath(int qid, int msgtype, FILE *file) {
     }
   }
   else {
-    printf("Master: Slave %d terminating at my time %llu.%09d because slave reached %s", 
+    printf("Master: Slave %d terminating at my time %llu.%09llu because slave reached %s", 
             msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
-    fprintf(file, "Master: Slave %d terminating at my time %llu.%09d because slave reached %s", 
+    fprintf(file, "Master: Slave %d terminating at my time %llu.%09llu because slave reached %s", 
             msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
 
     messageReceived++;
