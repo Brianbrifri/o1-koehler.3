@@ -28,6 +28,7 @@ int processNumber = 0;
 int slaveQueueId;
 int masterQueueId;
 const int QUIT_TIMEOUT = 10;
+struct msqid_ds msqid_buf;
 
 int main (int argc, char **argv) {
   int timeoutValue = 30;
@@ -124,6 +125,12 @@ int main (int argc, char **argv) {
   }
   if(shmdt(ossTimer) == -1) {
     perror("    Slave could not detach shared memory");
+  }
+
+  msgctl(masterQueueId, IPC_STAT, &msqid_buf);
+
+  while(msqid_buf.msg_qnum != 0) {
+    msgctl(masterQueueId, IPC_STAT, &msqid_buf);
   }
 
   printf("    Slave %d exiting\n", processNumber);

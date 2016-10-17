@@ -44,7 +44,7 @@ long long *ossTimer = 0;
 
 const int TOTAL_SLAVES = 100;
 const int MAXSLAVE = 20;
-const long long INCREMENTER = 1400;
+const long long INCREMENTER = 140000;
 
 struct msqid_ds msqid_ds_buf;
 
