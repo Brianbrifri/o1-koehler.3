@@ -154,7 +154,12 @@ void sendMessage(int qid, int msgtype, long long finishTime) {
   struct msgbuf msg;
 
   msg.mType = msgtype;
-  sprintf(msg.mText, "%llu.%09llu\n", finishTime / NANO_MODIFIER, finishTime % NANO_MODIFIER);
+  if(qid == slaveQueueId) {
+    sprintf(msg.mText, "Consumed message from slave %d\n", processNumber);
+  }
+  if(qid == masterQueueId) {
+    sprintf(msg.mText, "%llu.%09llu\n", finishTime / NANO_MODIFIER, finishTime % NANO_MODIFIER);
+  }
 
   if(msgsnd(qid, (void *) &msg, sizeof(msg.mText), IPC_NOWAIT) == -1) {
     perror("    Slave msgsnd error");
@@ -175,7 +180,7 @@ void getMessage(int qid, int msgtype) {
     printf("    Slave: No message available for msgrcv()\n");
   }
   else {
-    //printf("    Message received by slave #%d: %s", processNumber, msg.mText);
+    printf("    Message received by slave #%d: %s", processNumber, msg.mText);
   }
 }
 

@@ -44,8 +44,8 @@ long long *ossTimer = 0;
 
 const int TOTAL_SLAVES = 100;
 const int MAXSLAVE = 20;
-const long long INCREMENTER = 140000;
-
+const long long INCREMENTER = 40000;
+FILE *file;
 struct msqid_ds msqid_ds_buf;
 
 int main (int argc, char **argv)
@@ -59,7 +59,6 @@ int main (int argc, char **argv)
   int hflag = 0;
   int nonOptArgFlag = 0;
   int index;
-  FILE *file;
   char *filename = "test.out";
   char *defaultFileName = "test.out";
   char *programName = argv[0];
@@ -272,19 +271,14 @@ void cleanup() {
   //Sleep for one second to allow time for flags to change in processes
   sleep(1);
 
-  int j;
-  for(j = nextProcessToSend; j < processNumberBeingSpawned; j++) {
-    printf("Master sending a cleanup message to process %d\n", j);
-    sendMessage(slaveQueueId, 2);
-  }
-
   //free up the malloc'd memory for the arguments
   free(mArg);
   free(nArg);
   free(tArg);
-
   kill(-getpgrp(), SIGQUIT);
-  printf("Master waiting on all processes do dieeee\n");
+  sleep(1);
+  kill(-getpgrp(), SIGQUIT);
+  printf("Master waiting on all processes do die\n");
   childPid = wait(&status);
 
   printf("Master about to detach from shared memory\n");
@@ -298,6 +292,11 @@ void cleanup() {
   msgctl(slaveQueueId, IPC_RMID, NULL);
   msgctl(masterQueueId, IPC_RMID, NULL);
 
+  if(fclose(file)) {
+    perror("    Error closing file");
+  }
+
+
   printf("Master about to kill itself\n");
   //Kill this master process
   kill(getpid(), SIGKILL);
@@ -307,7 +306,7 @@ void sendMessage(int qid, int msgtype) {
   struct msgbuf msg;
 
   msg.mType = msgtype;
-  sprintf(msg.mText, "Time to enter CS\n");
+  sprintf(msg.mText, "Master initiating slave queue\n");
 
   if(msgsnd(qid, (void *) &msg, sizeof(msg.mText), IPC_NOWAIT) == -1) {
     perror("Master msgsnd error");
@@ -318,7 +317,6 @@ void sendMessage(int qid, int msgtype) {
 void processDeath(int qid, int msgtype, FILE *file) {
   struct msgbuf msg;
 
-  msgctl(masterQueueId, IPC_STAT, &msqid_ds_buf);
 
   if(msgrcv(qid, (void *) &msg, sizeof(msg.mText), msgtype, MSG_NOERROR | IPC_NOWAIT) == -1) {
     if(errno != ENOMSG) {
@@ -326,13 +324,14 @@ void processDeath(int qid, int msgtype, FILE *file) {
     }
   }
   else {
-    //childPid = wait(&status);
-    printf("Master: Slave %d terminating at my time %llu.%09llu because slave reached %s",
-            msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
-    fprintf(file, "Master: Slave %d terminating at my time %llu.%09llu because slave reached %s",
-            msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
-
+    msgctl(masterQueueId, IPC_STAT, &msqid_ds_buf);
     messageReceived++;
+    printf("%03d - Master: Slave %d terminating at my time %llu.%09llu because slave reached %s",
+            messageReceived, msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
+    fprintf(file, "%03d - Master: Slave %d terminating at my time %llu.%09llu because slave reached %s",
+            messageReceived, msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
+
+
     fprintf(stderr, "%s*****Master: %s%d%s/%d children completed work*****%s\n",YLW, RED, messageReceived, YLW, TOTAL_SLAVES, NRM);
 
     sendMessage(slaveQueueId, 2);
