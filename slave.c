@@ -49,7 +49,7 @@ int main (int argc, char **argv) {
 
   //get options from parent process
   opterr = 0;
-  while((c = getopt(argc, argv, short_options)) != -1) 
+  while((c = getopt(argc, argv, short_options)) != -1)
     switch (c) {
       case 'l':
         fileName = optarg;
@@ -75,7 +75,7 @@ int main (int argc, char **argv) {
     perror("    Slave could not attach shared mem");
     exit(1);
   }
-  
+
   //Ignore SIGINT so that it can be handled below
   signal(SIGINT, sigquitHandler);
 
@@ -99,7 +99,7 @@ int main (int argc, char **argv) {
   }
 
   //Where process block-receives for its message to continue
-  getMessage(slaveQueueId, processNumber);
+
 
   //Set an alarm to 10 more seconds than the parent process
   //so that the child will be killed if parents gets killed
@@ -109,20 +109,27 @@ int main (int argc, char **argv) {
   int i = 0;
   int j;
 
-  if(sigNotReceived) {
+  long long duration = 1 + rand() % 100000;
 
-    long long duration = 1 + rand() % 100000;
+  printf("    Slave %d got duration %llu\n", processNumber, duration);
+  startTime = *ossTimer;
+  currentTime = *ossTimer - startTime;
 
-    printf("    Slave %d got duration %llu\n", processNumber, duration);
-    startTime = *ossTimer;
-    currentTime = *ossTimer - startTime;
-
-    while((currentTime = (*ossTimer - startTime)) < duration) {
-      //printf("Current time: %i\n", currentTime);
+  while(1) {
+    if(sigNotReceived) {
+      getMessage(slaveQueueId, 2);
+      if(currentTime = (*ossTimer - startTime) >= duration) {
+        break;
+      }
+      sendMessage(slaveQueueId, 2, *ossTimer);
     }
-    
-    sendMessage(masterQueueId, 3, *ossTimer);
+    else {
+      break;
+    }
   }
+
+  sendMessage(masterQueueId, 3, *ossTimer);
+
   if(shmdt(ossTimer) == -1) {
     perror("    Slave could not detach shared memory");
   }
@@ -139,7 +146,7 @@ int main (int argc, char **argv) {
   sleep(1);
   kill(myPid, SIGKILL);
   printf("    Slave error\n");
-  
+
 }
 
 
@@ -148,7 +155,7 @@ void sendMessage(int qid, int msgtype, long long finishTime) {
 
   msg.mType = msgtype;
   sprintf(msg.mText, "%llu.%09llu\n", finishTime / NANO_MODIFIER, finishTime % NANO_MODIFIER);
-  
+
   if(msgsnd(qid, (void *) &msg, sizeof(msg.mText), IPC_NOWAIT) == -1) {
     perror("    Slave msgsnd error");
   }
@@ -168,13 +175,13 @@ void getMessage(int qid, int msgtype) {
     printf("    Slave: No message available for msgrcv()\n");
   }
   else {
-    printf("    Message received by slave #%d: %s", processNumber, msg.mText);
+    //printf("    Message received by slave #%d: %s", processNumber, msg.mText);
   }
 }
 
 
 //This handles SIGQUIT being sent from parent process
-//It sets the volatile int to 0 so that it will not enter in the CS. 
+//It sets the volatile int to 0 so that it will not enter in the CS.
 void sigquitHandler(int sig) {
   printf("    Slave %d has received signal %s (%d)\n", processNumber, strsignal(sig), sig);
   sigNotReceived = 0;
@@ -182,7 +189,7 @@ void sigquitHandler(int sig) {
   if(shmdt(ossTimer) == -1) {
     perror("    Slave could not detach shared memory");
   }
-  
+
   kill(myPid, SIGKILL);
 
   //The slaves have at most 5 more seconds to exit gracefully or they will be SIGTERM'd

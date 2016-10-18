@@ -73,7 +73,7 @@ int main (int argc, char **argv)
     {0,     0,            0,  0},
     {}
   };
-  
+
   //process arguments
   opterr = 0;
   while ((c = getopt_long (argc, argv, short_options, long_options, NULL)) != -1)
@@ -92,7 +92,7 @@ int main (int argc, char **argv)
         filename = optarg;
         break;
       case 't':
-        tValue = atoi(optarg);  
+        tValue = atoi(optarg);
         break;
       case '?':
         if (optopt == 's') {
@@ -113,11 +113,11 @@ int main (int argc, char **argv)
         }
         else {
           printShortHelpMessage();
-          return 0; 
+          return 0;
         }
       }
 
-  
+
   //print out all non-option arguments
   for (index = optind; index < argc; index++) {
     fprintf(stderr, "Non-option argument %s\n", argv[index]);
@@ -139,13 +139,13 @@ int main (int argc, char **argv)
   }
 
   //****START PROCESS MANAGEMENT****//
-  
+
   //Initialize the alarm and CTRL-C handler
   signal(SIGALRM, interruptHandler);
   signal(SIGINT, interruptHandler);
   signal(SIGCHLD, SIG_IGN);
   signal(SIGQUIT, SIG_IGN);
-  
+
   //set the alarm to tValue seconds
   alarm(tValue);
 
@@ -179,14 +179,14 @@ int main (int argc, char **argv)
     perror("Error opening file");
     exit(-1);
   }
-  
+
   fprintf(file,"***** BEGIN LOG *****\n");
- 
+
   //Spawn the inital value of slaves
   spawnSlaves(sValue);
 
   //Send a message telling the next process to go into the CS
-  sendMessage(slaveQueueId, nextProcessToSend);
+  sendMessage(slaveQueueId, 2);
 
   //While the number of messages received are less than the total number
   //of slaves are supposed to send back messages
@@ -208,11 +208,11 @@ int main (int argc, char **argv)
 
 void spawnSlaves(int count) {
   int j;
-  
+
   //Fork count # of processes
   for(j = 0; j < count; j++) {
     printf("About to spawn process #%d\n", processNumberBeingSpawned);
-  
+
     //exit on bad fork
     if((childPid = fork()) < 0) {
       perror("Fork Failure");
@@ -258,7 +258,7 @@ void interruptHandler(int SIG){
   }
 }
 
-//Cleanup memory and processes. 
+//Cleanup memory and processes.
 //kill calls SIGQUIT on the groupid to kill the children but
 //not the parent
 void cleanup() {
@@ -275,14 +275,14 @@ void cleanup() {
   int j;
   for(j = nextProcessToSend; j < processNumberBeingSpawned; j++) {
     printf("Master sending a cleanup message to process %d\n", j);
-    sendMessage(slaveQueueId, j); 
+    sendMessage(slaveQueueId, 2);
   }
 
   //free up the malloc'd memory for the arguments
   free(mArg);
   free(nArg);
   free(tArg);
-  
+
   kill(-getpgrp(), SIGQUIT);
   printf("Master waiting on all processes do dieeee\n");
   childPid = wait(&status);
@@ -308,7 +308,7 @@ void sendMessage(int qid, int msgtype) {
 
   msg.mType = msgtype;
   sprintf(msg.mText, "Time to enter CS\n");
-  
+
   if(msgsnd(qid, (void *) &msg, sizeof(msg.mText), IPC_NOWAIT) == -1) {
     perror("Master msgsnd error");
   }
@@ -317,7 +317,7 @@ void sendMessage(int qid, int msgtype) {
 
 void processDeath(int qid, int msgtype, FILE *file) {
   struct msgbuf msg;
-  
+
   msgctl(masterQueueId, IPC_STAT, &msqid_ds_buf);
 
   if(msgrcv(qid, (void *) &msg, sizeof(msg.mText), msgtype, MSG_NOERROR | IPC_NOWAIT) == -1) {
@@ -326,17 +326,19 @@ void processDeath(int qid, int msgtype, FILE *file) {
     }
   }
   else {
-    printf("Master: Slave %d terminating at my time %llu.%09llu because slave reached %s", 
+    //childPid = wait(&status);
+    printf("Master: Slave %d terminating at my time %llu.%09llu because slave reached %s",
             msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
-    fprintf(file, "Master: Slave %d terminating at my time %llu.%09llu because slave reached %s", 
+    fprintf(file, "Master: Slave %d terminating at my time %llu.%09llu because slave reached %s",
             msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
 
     messageReceived++;
     fprintf(stderr, "%s*****Master: %s%d%s/%d children completed work*****%s\n",YLW, RED, messageReceived, YLW, TOTAL_SLAVES, NRM);
-    
-    sendMessage(slaveQueueId, ++nextProcessToSend);
+
+    sendMessage(slaveQueueId, 2);
+    ++nextProcessToSend;
     if(processNumberBeingSpawned <= TOTAL_SLAVES) {
-      spawnSlaves(1); 
+      spawnSlaves(1);
     }
   }
 }
@@ -378,5 +380,3 @@ void printShortHelpMessage(void) {
   printf("\nAcceptable options are:\n");
   printf("[-h], [--help], [-l][required_arg], [-s][required_arg], [-t][required_arg]\n\n");
 }
-
-
