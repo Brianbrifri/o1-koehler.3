@@ -99,30 +99,27 @@ int main (int argc, char **argv) {
   }
 
   //Where process block-receives for its message to continue
-  getMessage(slaveQueueId, processNumber);
 
   //Set an alarm to 10 more seconds than the parent process
   //so that the child will be killed if parents gets killed
   //and child becomes slave of init
   alarm(timeoutValue);
+  long long duration = 1 + rand() % 100000;
 
-  int i = 0;
-  int j;
+  printf("    Slave %d got duration %llu\n", processNumber, duration);
+  startTime = *ossTimer;
+  currentTime = *ossTimer - startTime;
 
-  if(sigNotReceived) {
-
-    long long duration = 1 + rand() % 100000;
-
-    printf("    Slave %d got duration %llu\n", processNumber, duration);
-    startTime = *ossTimer;
-    currentTime = *ossTimer - startTime;
-
-    while((currentTime = (*ossTimer - startTime)) < duration) {
-      //printf("Current time: %i\n", currentTime);
+  while(sigNotReceived) {
+    getMessage(slaveQueueId, 2);
+    if((currentTime = (*ossTimer - startTime)) >= duration) {
+      break;
     }
-    
-    sendMessage(masterQueueId, 3, *ossTimer);
+    sendMessage(slaveQueueId, 2, *ossTimer);
   }
+
+  sendMessage(masterQueueId, 3, *ossTimer);
+
   if(shmdt(ossTimer) == -1) {
     perror("    Slave could not detach shared memory");
   }
@@ -147,7 +144,13 @@ void sendMessage(int qid, int msgtype, long long finishTime) {
   struct msgbuf msg;
 
   msg.mType = msgtype;
-  sprintf(msg.mText, "%llu.%09llu\n", finishTime / NANO_MODIFIER, finishTime % NANO_MODIFIER);
+
+  if(qid == slaveQueueId) {
+    sprintf(msg.mText, "Got lock from slave %d\n", processNumber);
+  }
+  if(qid == masterQueueId) {
+    sprintf(msg.mText, "%llu.%09llu\n", finishTime / NANO_MODIFIER, finishTime % NANO_MODIFIER);
+  }
   
   if(msgsnd(qid, (void *) &msg, sizeof(msg.mText), IPC_NOWAIT) == -1) {
     perror("    Slave msgsnd error");

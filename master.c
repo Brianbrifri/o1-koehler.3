@@ -44,7 +44,7 @@ long long *ossTimer = 0;
 
 const int TOTAL_SLAVES = 100;
 const int MAXSLAVE = 20;
-const long long INCREMENTER = 140000;
+const long long INCREMENTER = 1400;
 
 struct msqid_ds msqid_ds_buf;
 
@@ -186,7 +186,7 @@ int main (int argc, char **argv)
   spawnSlaves(sValue);
 
   //Send a message telling the next process to go into the CS
-  sendMessage(slaveQueueId, nextProcessToSend);
+  sendMessage(slaveQueueId, 2);
 
   //While the number of messages received are less than the total number
   //of slaves are supposed to send back messages
@@ -275,7 +275,7 @@ void cleanup() {
   int j;
   for(j = nextProcessToSend; j < processNumberBeingSpawned; j++) {
     printf("Master sending a cleanup message to process %d\n", j);
-    sendMessage(slaveQueueId, j); 
+    sendMessage(slaveQueueId, 2); 
   }
 
   //free up the malloc'd memory for the arguments
@@ -334,7 +334,8 @@ void processDeath(int qid, int msgtype, FILE *file) {
     messageReceived++;
     fprintf(stderr, "%s*****Master: %s%d%s/%d children completed work*****%s\n",YLW, RED, messageReceived, YLW, TOTAL_SLAVES, NRM);
     
-    sendMessage(slaveQueueId, ++nextProcessToSend);
+    sendMessage(slaveQueueId, 2);
+    ++nextProcessToSend;
     if(processNumberBeingSpawned <= TOTAL_SLAVES) {
       spawnSlaves(1); 
     }
