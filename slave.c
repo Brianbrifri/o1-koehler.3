@@ -24,6 +24,7 @@ void zombieKiller(int);
 volatile sig_atomic_t sigNotReceived = 1;
 pid_t myPid;
 long long *ossTimer;
+struct sharedStruct *myStruct;
 int processNumber = 0;
 int slaveQueueId;
 int masterQueueId;
@@ -71,7 +72,7 @@ int main (int argc, char **argv) {
   srand(time(NULL) + processNumber);
 
   //Try to attach to shared memory
-  if((ossTimer = (long long *)shmat(shmid, NULL, 0)) == (void *) -1) {
+  if((myStruct = (sharedStruct *)shmat(shmid, NULL, 0)) == (void *) -1) {
     perror("    Slave could not attach shared mem");
     exit(1);
   }
@@ -112,32 +113,34 @@ int main (int argc, char **argv) {
   long long duration = 1 + rand() % 100000;
 
   printf("    Slave %d got duration %llu\n", processNumber, duration);
-  startTime = *ossTimer;
-  currentTime = *ossTimer - startTime;
+  startTime = myStruct->ossTimer;
+  currentTime = myStruct->ossTimer - startTime;
 
   while(1) {
-    if(sigNotReceived) {
+    if(myStruct->sigNotReceived) {
       getMessage(slaveQueueId, 2);
-      if(currentTime = (*ossTimer - startTime) >= duration) {
+      if(currentTime = (myStruct->ossTimer - startTime) >= duration) {
         break;
       }
-      sendMessage(slaveQueueId, 2, *ossTimer);
+      sendMessage(slaveQueueId, 2, myStruct->ossTimer);
     }
     else {
       break;
     }
   }
 
-  sendMessage(masterQueueId, 3, *ossTimer);
+  sendMessage(masterQueueId, 3, myStruct->ossTimer);
 
-  if(shmdt(ossTimer) == -1) {
+  if(shmdt(myStruct) == -1) {
     perror("    Slave could not detach shared memory");
   }
 
   msgctl(masterQueueId, IPC_STAT, &msqid_buf);
 
-  while(msqid_buf.msg_qnum != 0) {
-    msgctl(masterQueueId, IPC_STAT, &msqid_buf);
+  if(myStruct->sigNotReceived) {
+    while(msqid_buf.msg_qnum != 0) {
+      msgctl(masterQueueId, IPC_STAT, &msqid_buf);
+     }
   }
 
   printf("    Slave %d exiting\n", processNumber);
@@ -191,7 +194,7 @@ void sigquitHandler(int sig) {
   printf("    Slave %d has received signal %s (%d)\n", processNumber, strsignal(sig), sig);
   sigNotReceived = 0;
 
-  if(shmdt(ossTimer) == -1) {
+  if(shmdt(myStruct) == -1) {
     perror("    Slave could not detach shared memory");
   }
 

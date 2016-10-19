@@ -20,7 +20,7 @@ void interruptHandler(int);
 void cleanup(void);
 void sendMessage(int, int);
 void processDeath(int, int, FILE*);
-int detachAndRemove(int, long long*);
+int detachAndRemove(int, sharedStruct*);
 void printHelpMessage(void);
 void printShortHelpMessage(void);
 char *mArg;
@@ -41,6 +41,8 @@ int nextProcessToSend = 1;
 int processNumberBeingSpawned = 1;
 int messageReceived = 0;
 long long *ossTimer = 0;
+
+struct sharedStruct *myStruct;
 
 const int TOTAL_SLAVES = 100;
 const int MAXSLAVE = 20;
@@ -150,13 +152,13 @@ int main (int argc, char **argv)
 
   //Try to get the shared mem id from the key with a size of the struct
   //create it with all perms
-  if((shmid = shmget(timerKey, sizeof(long long), IPC_CREAT | 0777)) == -1) {
+  if((shmid = shmget(timerKey, sizeof(sharedStruct), IPC_CREAT | 0777)) == -1) {
     perror("Bad shmget allocation");
     exit(-1);
   }
 
   //Try to attach the struct pointer to shared memory
-  if((ossTimer = (long long *)shmat(shmid, NULL, 0)) == (void *) -1) {
+  if((myStruct = (sharedStruct *)shmat(shmid, NULL, 0)) == (void *) -1) {
     perror("Master could not attach shared mem");
     exit(-1);
   }
@@ -179,6 +181,9 @@ int main (int argc, char **argv)
     exit(-1);
   }
 
+  myStruct->ossTimer = 0;
+  myStruct->sigNotReceived = 1;
+
   fprintf(file,"***** BEGIN LOG *****\n");
 
   //Spawn the inital value of slaves
@@ -189,8 +194,9 @@ int main (int argc, char **argv)
 
   //While the number of messages received are less than the total number
   //of slaves are supposed to send back messages
-  while(messageReceived < TOTAL_SLAVES && *ossTimer < 2000000000 && sigNotReceived) {
-    *ossTimer = *ossTimer + INCREMENTER;
+  while(messageReceived < TOTAL_SLAVES && myStruct->ossTimer < 2000000000 && myStruct->sigNotReceived) {
+    myStruct->ossTimer = myStruct->ossTimer + INCREMENTER;
+//    *ossTimer = *ossTimer + INCREMENTER;
     processDeath(masterQueueId, 3, file);
   }
 
@@ -262,28 +268,21 @@ void interruptHandler(int SIG){
 //not the parent
 void cleanup() {
   signal(SIGQUIT, SIG_IGN);
+  myStruct->sigNotReceived = 0;
 
   printf("Master sending SIGQUIT\n");
   kill(-getpgrp(), SIGQUIT);
-
-  sigNotReceived = 0;
-
-  //Sleep for one second to allow time for flags to change in processes
-  sleep(1);
 
   //free up the malloc'd memory for the arguments
   free(mArg);
   free(nArg);
   free(tArg);
-  kill(-getpgrp(), SIGQUIT);
-  sleep(1);
-  kill(-getpgrp(), SIGQUIT);
   printf("Master waiting on all processes do die\n");
   childPid = wait(&status);
 
   printf("Master about to detach from shared memory\n");
   //Detach and remove the shared memory after all child process have died
-  if(detachAndRemove(shmid, ossTimer) == -1) {
+  if(detachAndRemove(shmid, myStruct) == -1) {
     perror("Failed to destroy shared memory segment");
   }
 
@@ -327,9 +326,9 @@ void processDeath(int qid, int msgtype, FILE *file) {
     msgctl(masterQueueId, IPC_STAT, &msqid_ds_buf);
     messageReceived++;
     printf("%03d - Master: Slave %d terminating at my time %llu.%09llu because slave reached %s",
-            messageReceived, msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
+            messageReceived, msqid_ds_buf.msg_lspid, myStruct->ossTimer / NANO_MODIFIER, myStruct->ossTimer % NANO_MODIFIER, msg.mText);
     fprintf(file, "%03d - Master: Slave %d terminating at my time %llu.%09llu because slave reached %s",
-            messageReceived, msqid_ds_buf.msg_lspid, *ossTimer / NANO_MODIFIER, *ossTimer % NANO_MODIFIER, msg.mText);
+            messageReceived, msqid_ds_buf.msg_lspid, myStruct->ossTimer / NANO_MODIFIER, myStruct->ossTimer % NANO_MODIFIER, msg.mText);
 
 
     fprintf(stderr, "%s*****Master: %s%d%s/%d children completed work*****%s\n",YLW, RED, messageReceived, YLW, TOTAL_SLAVES, NRM);
@@ -344,7 +343,7 @@ void processDeath(int qid, int msgtype, FILE *file) {
 
 
 //Detach and remove function
-int detachAndRemove(int shmid, long long *shmaddr) {
+int detachAndRemove(int shmid, sharedStruct *shmaddr) {
   printf("Master: Detach and Remove Shared Memory\n");
   int error = 0;
   if(shmdt(shmaddr) == -1) {

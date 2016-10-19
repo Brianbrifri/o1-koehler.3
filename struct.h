@@ -8,6 +8,11 @@
 #define NRM "\x1b[0m"
 static const long long NANO_MODIFIER = 1000000000;
 
+typedef struct sharedStruct {
+  long long ossTimer;
+  int sigNotReceived;
+} sharedStruct;
+
 typedef struct msgbuf {
   long mType;
   char mText[80];
