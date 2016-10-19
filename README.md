@@ -1,11 +1,13 @@
-# o1-koehler.2
-Run make to get the executables for the program. 
-./slavedriver is the master program. You may use any or none of the options with required arguments.
-I used a struct for the shared memory to share the necessary info across processes. 
-I only used one sleep function, and for 5 seconds at that, at the end of the critical section so as to allow other processes
-  to "randomly" get in out of order and to show that the variable can be incremented and written to a log at a very high rate 
-  without race conditioning. 
-Output has been colorified a bit. 
-When the master process times out before all the slaves are done or the user sends CTRL-C, master tries to gracefully kill the slave processes by letting them finish
-  their work in their current loop. If they are not finished in time, the slaves will terminate with SIGTERM/SIGKILL.
-
+# o1-koehler.3
+"make" build the program.
+./oss runs the program. 
+Options to change runtime can be found by add -h or --help to ./oss
+The master sets up shared memory, masterqueue and slavequeue.
+Then it spawns x number of slaves (default 5), sends a message to the slave queue to kick them off
+then starts updating the timer. The slaves will only break out of CS and into the rest of the code when its time is up
+The master in constantly checking its queue to see if a slave sent it a message. If not, it continues due to IPC_NOWAIT 
+otherwise it processes the message and and prints to file then sends a message back to the slave queue so that they will
+start trying to enter the CS again.
+The master flips the sigNotReceived bit to false if it no longer wants the slaves to try to enter CS. This happens when time runs out 
+or Interrupt from user received. 
+The master then waits for all the children to die then cleans up the queues and shared memory
